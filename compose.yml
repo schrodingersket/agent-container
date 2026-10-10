@@ -1,0 +1,15 @@
+services:
+  pi:
+    image: schrodingersket/pi:${PI_VERSION:-v1.1.0}
+    hostname: pi.localhost
+    build:
+      args:
+        - PI_VERSION=${PI_VERSION:-v1.1.0}
+      context: .
+    restart: unless-stopped
+    volumes:
+      - ${PI_WORKSPACE_HOST_VOLUME:-pi_workspace}:/workspace
+      - ${PI_AGENT_HOME_HOST_VOLUME:-pi_agent_home}:/root/.pi/agent
+volumes:
+  pi_workspace:
+  pi_agent_home:
