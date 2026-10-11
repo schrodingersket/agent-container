@@ -1,12 +1,14 @@
 FROM node:24-bookworm-slim
 
 ARG PI_VERSION
+ARG UV_VERSION
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
      bash \
      ca-certificates \
      curl \
+     default-jdk \
      git \
      gnupg \
      ripgrep \
@@ -16,6 +18,10 @@ RUN apt-get update \
 # Install Pi agent harness
 #
 RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@${PI_VERSION}
+
+# Install uv
+#
+RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh
 
 # Install Claude Code
 #

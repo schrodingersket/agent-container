@@ -5,6 +5,7 @@ services:
     build:
       args:
         - PI_VERSION=${PI_VERSION:-v1.1.0}
+        - UV_VERSION=${UV_VERSION:-0.13.0}
       context: .
     restart: unless-stopped
     volumes:
