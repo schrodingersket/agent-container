@@ -10,6 +10,7 @@ RUN apt-get update \
      git \
      gnupg \
      ripgrep \
+     vim \
   && rm -rf /var/lib/apt/lists/*
 
 # Install Pi agent harness
@@ -25,7 +26,8 @@ RUN install -d -m 0755 /etc/apt/keyrings \
   && echo "deb [signed-by=/etc/apt/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/stable stable main" \
      | tee /etc/apt/sources.list.d/claude-code.list \
   && apt update \
-  && apt install claude-code
+  && apt install claude-code \
+  && ln -s ~/.claude/.claude.json ~/.claude.json
 
 WORKDIR /workspace
 ENTRYPOINT ["pi"]

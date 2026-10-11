@@ -10,6 +10,8 @@ services:
     volumes:
       - ${PI_WORKSPACE_HOST_VOLUME:-pi_workspace}:/workspace
       - ${PI_AGENT_HOME_HOST_VOLUME:-pi_agent_home}:/root/.pi/agent
+      - ${PI_CLAUDE_HOME_HOST_VOLUME:-pi_agent_home}:/root/.claude
 volumes:
   pi_workspace:
   pi_agent_home:
+  pi_claude_home:
