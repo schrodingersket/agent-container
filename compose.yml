@@ -18,7 +18,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: "${NVIDIA_GPUS:-all}"
+              count: "${NVIDIA_GPUS:-0}"
               capabilities: [ gpu ]
 volumes:
   pi_workspace:
