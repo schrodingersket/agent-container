@@ -1,7 +1,10 @@
-FROM node:24-bookworm-slim
+FROM nvidia/cuda:12.9.2-cudnn-devel-ubuntu24.04
 
 ARG PI_VERSION
 ARG UV_VERSION
+ARG NODE_VERSION
+
+ENV NVM_DIR="${HOME:-/root}/.nvm"
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
@@ -15,9 +18,10 @@ RUN apt-get update \
      vim \
   && rm -rf /var/lib/apt/lists/*
 
-# Install Pi agent harness
+# Install Pi agent harness via NVM
 #
-RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@${PI_VERSION}
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh | bash \
+  && bash -c "source ${NVM_DIR}/nvm.sh && nvm install ${NODE_VERSION} && npm install -g --ignore-scripts @earendil-works/pi-coding-agent@${PI_VERSION}"
 
 # Install uv
 #
@@ -36,4 +40,4 @@ RUN install -d -m 0755 /etc/apt/keyrings \
   && ln -s ~/.claude/.claude.json ~/.claude.json
 
 WORKDIR /workspace
-ENTRYPOINT ["pi"]
+ENTRYPOINT ["bash", "-c", "source $NVM_DIR/nvm.sh && exec \"$@\"", "--", "pi"]
