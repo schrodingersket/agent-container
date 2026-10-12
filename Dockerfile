@@ -40,4 +40,4 @@ RUN install -d -m 0755 /etc/apt/keyrings \
   && ln -s ~/.claude/.claude.json ~/.claude.json
 
 WORKDIR /workspace
-ENTRYPOINT ["bash", "-c", "source $NVM_DIR/nvm.sh && exec \"$@\"", "--", "pi"]
+ENTRYPOINT ["bash", "-c", "source $NVM_DIR/nvm.sh && exec \"$@\"", "--"]
