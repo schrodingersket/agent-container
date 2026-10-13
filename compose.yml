@@ -4,7 +4,10 @@ services:
     hostname: pi.localhost
     build:
       args:
+        - CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION:-v2.1.287}
+        - CODEX_VERSION=${CODEX_VERSION:-v0.162.1}
         - NODE_VERSION=${NODE_VERSION:-24}
+        - OPENCODE_VERSION=${OPENCODE_VERSION:-v2.0.27}
         - PI_VERSION=${PI_VERSION:-v1.1.0}
         - UV_VERSION=${UV_VERSION:-0.13.0}
       context: .
@@ -12,7 +15,11 @@ services:
     volumes:
       - ${PI_WORKSPACE_HOST_VOLUME:-pi_workspace}:/workspace
       - ${PI_AGENT_HOME_HOST_VOLUME:-pi_agent_home}:/root/.pi/agent
-      - ${PI_CLAUDE_HOME_HOST_VOLUME:-pi_agent_home}:/root/.claude
+      - ${PI_CLAUDE_HOME_HOST_VOLUME:-pi_claude_home}:/root/.claude
+      - ${PI_CODEX_HOME_HOST_VOLUME:-pi_codex_home}:/root/.codex
+      - ${PI_OPENCODE_CONFIG_HOST_VOLUME:-pi_opencode_config}:/root/.config/opencode
+      - ${PI_OPENCODE_DATA_HOST_VOLUME:-pi_opencode_data}:/root/.local/share/opencode
+      - ${PI_OPENCODE_STATE_HOST_VOLUME:-pi_opencode_state}:/root/.local/state/opencode
     deploy:
       resources:
         reservations:
@@ -21,6 +28,10 @@ services:
               count: "${NVIDIA_GPUS:-0}"
               capabilities: [ gpu ]
 volumes:
-  pi_workspace:
   pi_agent_home:
   pi_claude_home:
+  pi_codex_home:
+  pi_opencode_config:
+  pi_opencode_data:
+  pi_opencode_state:
+  pi_workspace:

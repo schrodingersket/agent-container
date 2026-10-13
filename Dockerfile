@@ -1,10 +1,14 @@
 FROM nvidia/cuda:12.9.2-cudnn-devel-ubuntu24.04
 
+ARG CLAUDE_CODE_VERSION
+ARG CODEX_VERSION
+ARG NODE_VERSION
+ARG OPENCODE_VERSION
 ARG PI_VERSION
 ARG UV_VERSION
-ARG NODE_VERSION
 
 ENV NVM_DIR="${HOME:-/root}/.nvm"
+ENV CLAUDE_CONFIG_DIR="${HOME:-/root}/.claude"
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
@@ -18,26 +22,26 @@ RUN apt-get update \
      vim \
   && rm -rf /var/lib/apt/lists/*
 
-# Install Pi agent harness via NVM
+# Install uv+nvm+node
 #
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh | bash \
-  && bash -c "source ${NVM_DIR}/nvm.sh && nvm install ${NODE_VERSION} && npm install -g --ignore-scripts @earendil-works/pi-coding-agent@${PI_VERSION}"
+RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh \
+  && curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh | bash \
+  && bash -c "source ${NVM_DIR}/nvm.sh && nvm install ${NODE_VERSION}"
 
-# Install uv
+# Install Pi agent harness
 #
-RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh
+RUN bash -c "source ${NVM_DIR}/nvm.sh && npm install -g \
+    @earendil-works/pi-coding-agent@${PI_VERSION} \
+    --ignore-scripts"
 
-# Install Claude Code
+# Install other harnesses (may be useful for bootstrapping Pi)
 #
-RUN install -d -m 0755 /etc/apt/keyrings \
-  && curl -fsSL https://downloads.claude.ai/keys/claude-code.asc \
-     -o /etc/apt/keyrings/claude-code.asc \
-  && gpg --show-keys /etc/apt/keyrings/claude-code.asc \
-  && echo "deb [signed-by=/etc/apt/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/stable stable main" \
-     | tee /etc/apt/sources.list.d/claude-code.list \
-  && apt update \
-  && apt install claude-code \
-  && ln -s ~/.claude/.claude.json ~/.claude.json
+RUN bash -c "source ${NVM_DIR}/nvm.sh && npm install -g \
+    @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
+    @openai/codex@${CODEX_VERSION} \
+    @opencode/cli@${OPENCODE_VERSION}"
+
+
 
 WORKDIR /workspace
 ENTRYPOINT ["bash", "-c", "source $NVM_DIR/nvm.sh && exec \"$@\"", "--"]
