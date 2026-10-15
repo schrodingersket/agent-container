@@ -1,0 +1,12 @@
+services:
+  agent-container:
+    image: schrodingersket/agent-container:${PI_VERSION:-v1.1.0}
+    build:
+      args:
+        - CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION:-v2.1.287}
+        - CODEX_VERSION=${CODEX_VERSION:-v0.162.1}
+        - NODE_VERSION=${NODE_VERSION:-24}
+        - OPENCODE_VERSION=${OPENCODE_VERSION:-v2.0.27}
+        - PI_VERSION=${PI_VERSION:-v1.1.0}
+        - UV_VERSION=${UV_VERSION:-0.13.0}
+      context: .
