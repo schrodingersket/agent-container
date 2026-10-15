@@ -1,0 +1,37 @@
+services:
+  agent-devcontainer:
+    image: schrodingersket/agent-container:${PI_VERSION:-v1.1.0}
+    hostname: agent-devcontainer.localhost
+    build:
+      args:
+        - CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION:-v2.1.287}
+        - CODEX_VERSION=${CODEX_VERSION:-v0.162.1}
+        - NODE_VERSION=${NODE_VERSION:-24}
+        - OPENCODE_VERSION=${OPENCODE_VERSION:-v2.0.27}
+        - PI_VERSION=${PI_VERSION:-v1.1.0}
+        - UV_VERSION=${UV_VERSION:-0.13.0}
+      context: .
+    restart: unless-stopped
+    volumes:
+      - ${AGENT_DEVCONTAINER_WORKSPACE_HOST_VOLUME:-agent_devcontainer_workspace}:/workspace
+      - ${AGENT_DEVCONTAINER_PI_AGENT_HOME_HOST_VOLUME:-agent_devcontainer_pi_agent_home}:/root/.pi/agent
+      - ${AGENT_DEVCONTAINER_CLAUDE_HOME_HOST_VOLUME:-agent_devcontainer_claude_home}:/root/.claude
+      - ${AGENT_DEVCONTAINER_CODEX_HOME_HOST_VOLUME:-agent_devcontainer_codex_home}:/root/.codex
+      - ${AGENT_DEVCONTAINER_OPENCODE_CONFIG_HOST_VOLUME:-agent_devcontainer_opencode_config}:/root/.config/opencode
+      - ${AGENT_DEVCONTAINER_OPENCODE_DATA_HOST_VOLUME:-agent_devcontainer_opencode_data}:/root/.local/share/opencode
+      - ${AGENT_DEVCONTAINER_OPENCODE_STATE_HOST_VOLUME:-agent_devcontainer_opencode_state}:/root/.local/state/opencode
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: "${NVIDIA_GPUS:-0}"
+              capabilities: [ gpu ]
+volumes:
+  agent_devcontainer_pi_agent_home:
+  agent_devcontainer_claude_home:
+  agent_devcontainer_codex_home:
+  agent_devcontainer_opencode_config:
+  agent_devcontainer_opencode_data:
+  agent_devcontainer_opencode_state:
+  agent_devcontainer_workspace:

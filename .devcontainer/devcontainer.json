@@ -1,5 +1,5 @@
 {
-    "dockerComposeFile": "../compose.yml",
-    "service": "pi",
+    "dockerComposeFile": "../compose.devcontainer.yml",
+    "service": "agent-devcontainer",
     "workspaceFolder": "/workspace/${localWorkspaceFolderBasename}"
 }
