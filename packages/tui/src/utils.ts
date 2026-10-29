@@ -326,6 +326,13 @@ export function stripTerminalSequences(str: string): string {
 	return result;
 }
 
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]+/g;
+
+/** Replace each run of C0 and C1 control characters (ESC, BEL, newlines, ...) with one space. */
+export function replaceControlCharacters(str: string): string {
+	return str.replace(CONTROL_CHARACTERS, " ");
+}
+
 interface GraphemeCellRange {
 	start: number;
 	end: number;
@@ -1351,8 +1358,13 @@ export function extractSegments(
 			// Include ANSI codes in their respective segments
 			if (currentCol < beforeEnd) {
 				pendingAnsiBefore += ansi.code;
-			} else if (currentCol >= afterStart && currentCol < afterEnd && afterStarted) {
-				// Only include after we've started "after" (styling already prepended)
+			} else if (
+				currentCol >= afterStart &&
+				currentCol < afterEnd &&
+				(afterStarted || ansi.code.startsWith("\x1b_"))
+			) {
+				// SGR codes are only included after "after" started (styling already prepended). Zero-width APC
+				// markers like CURSOR_MARKER are not tracked styling, so keep them at the boundary too.
 				after += ansi.code;
 			}
 			i += ansi.length;

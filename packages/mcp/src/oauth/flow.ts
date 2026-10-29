@@ -21,6 +21,7 @@ import {
 } from "./errors.ts";
 import {
 	type AuthorizationServerMetadata,
+	isHttpUrl,
 	type OAuthClientInformation,
 	type OAuthClientInformationFull,
 	type OAuthClientInformationMixed,
@@ -38,10 +39,21 @@ export type AddClientAuthentication = (
 	metadata?: AuthorizationServerMetadata,
 ) => void | Promise<void>;
 
+/** A Client ID Metadata Document: an https URL used as `client_id`, and a redirect URI it lists. */
+export interface OAuthClientMetadataDocument {
+	url: string;
+	redirectUrl: string;
+}
+
 export interface OAuthClientProvider {
 	readonly redirectUrl: string | URL;
 	readonly clientMetadata: OAuthClientMetadata;
-	readonly clientMetadataUrl?: string;
+	/**
+	 * Client ID Metadata Document to identify as instead of registering dynamically, or `undefined` to
+	 * register. Called when no client information is stored; the document is not stored. `metadata` is
+	 * `undefined` when the authorization server has none; check `client_id_metadata_document_supported`.
+	 */
+	clientMetadataDocument?(metadata: AuthorizationServerMetadata | undefined): OAuthClientMetadataDocument | undefined;
 	state?(): string | Promise<string>;
 	clientInformation(): OAuthClientInformationMixed | undefined | Promise<OAuthClientInformationMixed | undefined>;
 	saveClientInformation?(information: OAuthClientInformationMixed): void | Promise<void>;
@@ -69,6 +81,8 @@ export interface OAuthFlowOptions {
 	 */
 	authorizationServerMetadataUrl?: URL;
 	fetch?: McpFetch;
+	/** Aborts every request of the flow. Requests have no time limit of their own; combine with a timeout as needed. */
+	signal?: AbortSignal;
 	skipIssuerValidation?: boolean;
 	/**
 	 * Go straight to the authorization redirect instead of refreshing stored tokens, for example when the
@@ -86,10 +100,24 @@ export interface TokenRequestOptions {
 	resource?: string;
 	addClientAuthentication?: AddClientAuthentication;
 	fetch?: McpFetch;
+	signal?: AbortSignal;
 }
 
 function loopback(hostname: string): boolean {
 	return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "::1";
+}
+
+/**
+ * The OpenID Connect `application_type` for `redirect_uris` (MCP SEP-837). Without one, OpenID Connect servers
+ * assume `web`, which rejects http loopback redirect URIs. Loopback hosts and custom schemes are native (RFC 8252).
+ */
+function applicationType(redirectUris: readonly string[]): "native" | "web" {
+	const native = redirectUris.some((uri) => {
+		if (!URL.canParse(uri)) return false;
+		const url = new URL(uri);
+		return (url.protocol !== "http:" && url.protocol !== "https:") || loopback(url.hostname);
+	});
+	return native ? "native" : "web";
 }
 
 function secureEndpoint(value: string | URL): URL {
@@ -159,6 +187,8 @@ export async function startAuthorization(
 		throw new Error("Authorization server does not support PKCE S256");
 	}
 	const url = new URL(metadata?.authorization_endpoint ?? new URL("/authorize", authorizationServerUrl));
+	// Callers open this URL with the platform URL handler, which also launches files and custom protocols.
+	if (!isHttpUrl(url)) throw new Error(`Invalid authorization endpoint ${url.href}`);
 	const { verifier, challenge } = await pkce();
 	url.searchParams.set("response_type", "code");
 	url.searchParams.set("client_id", options.clientInformation.client_id);
@@ -193,7 +223,12 @@ async function tokenRequest(
 			params,
 		);
 	}
-	const response = await (options.fetch ?? globalThis.fetch)(url, { method: "POST", headers, body: params });
+	const response = await (options.fetch ?? globalThis.fetch)(url, {
+		method: "POST",
+		headers,
+		body: params,
+		signal: options.signal,
+	});
 	const text = await response.text();
 	let value: unknown;
 	try {
@@ -218,6 +253,7 @@ export async function registerClient(
 		clientMetadata: OAuthClientMetadata;
 		scope?: string;
 		fetch?: McpFetch;
+		signal?: AbortSignal;
 	},
 ): Promise<OAuthClientInformationFull> {
 	const endpoint = options.metadata?.registration_endpoint;
@@ -228,7 +264,13 @@ export async function registerClient(
 		{
 			method: "POST",
 			headers: { Accept: "application/json", "content-type": "application/json" },
-			body: JSON.stringify({ ...options.clientMetadata, ...(options.scope ? { scope: options.scope } : {}) }),
+			body: JSON.stringify({
+				...options.clientMetadata,
+				application_type:
+					options.clientMetadata.application_type ?? applicationType(options.clientMetadata.redirect_uris),
+				...(options.scope ? { scope: options.scope } : {}),
+			}),
+			signal: options.signal,
 		},
 	);
 	if (!response.ok) throw new OAuthRegistrationError(response.status, await response.text());
@@ -290,6 +332,7 @@ async function runFlow(provider: OAuthClientProvider, options: OAuthFlowOptions)
 					(await discoverAuthorizationServerMetadata(cached.authorizationServerUrl, {
 						fetch: options.fetch,
 						skipIssuerValidation: options.skipIssuerValidation,
+						signal: options.signal,
 					})),
 				resourceMetadata: cached.resourceMetadata,
 			}
@@ -298,6 +341,7 @@ async function runFlow(provider: OAuthClientProvider, options: OAuthFlowOptions)
 				authorizationServerMetadataUrl: metadataUrl,
 				fetch: options.fetch,
 				skipIssuerValidation: options.skipIssuerValidation,
+				signal: options.signal,
 			});
 	if (!metadataUrl) {
 		await provider.saveDiscoveryState?.({
@@ -310,43 +354,47 @@ async function runFlow(provider: OAuthClientProvider, options: OAuthFlowOptions)
 	// `||`, not `??`: an empty scope (for example from `scopes_supported: []`) falls through to the next source.
 	const scope =
 		options.scope || discovered.resourceMetadata?.scopes_supported?.join(" ") || provider.clientMetadata.scope;
-	let client = await provider.clientInformation();
+	const stored = await provider.clientInformation();
+	const clientDocument = stored ? undefined : provider.clientMetadataDocument?.(metadata);
+	if (clientDocument) {
+		const url = new URL(clientDocument.url);
+		if (url.protocol !== "https:" || url.pathname === "/") throw new Error("Invalid OAuth client metadata URL");
+	}
+	let client = stored ?? (clientDocument && { client_id: clientDocument.url });
 	if (!client) {
 		if (options.authorizationCode) throw new Error("OAuth client information is missing during code exchange");
-		if (metadata?.client_id_metadata_document_supported && provider.clientMetadataUrl) {
-			const url = new URL(provider.clientMetadataUrl);
-			if (url.protocol !== "https:" || url.pathname === "/") throw new Error("Invalid OAuth client metadata URL");
-			client = { client_id: provider.clientMetadataUrl };
-			await provider.saveClientInformation?.(client);
-		} else {
-			if (!provider.saveClientInformation) throw new Error("OAuth client information cannot be persisted");
-			client = await registerClient(discovered.authorizationServerUrl, {
-				metadata,
-				clientMetadata: provider.clientMetadata,
-				scope,
-				fetch: options.fetch,
-			});
-			await provider.saveClientInformation(client);
-		}
+		if (!provider.saveClientInformation) throw new Error("OAuth client information cannot be persisted");
+		client = await registerClient(discovered.authorizationServerUrl, {
+			metadata,
+			clientMetadata: provider.clientMetadata,
+			scope,
+			fetch: options.fetch,
+			signal: options.signal,
+		});
+		await provider.saveClientInformation(client);
 	}
+	// The document's redirect URI may differ from the provider's, for example by a server-specific path.
+	const redirectUrl = clientDocument?.redirectUrl ?? provider.redirectUrl;
 	const tokenOptions: TokenRequestOptions = {
 		metadata,
 		clientInformation: client,
 		resource,
 		addClientAuthentication: provider.addClientAuthentication,
 		fetch: options.fetch,
+		signal: options.signal,
 	};
 	if (options.authorizationCode) {
-		// RFC 9207: never send a code from another authorization server to this one.
+		// RFC 9207: never send a code from another authorization server to this one. Without metadata there
+		// is no issuer to compare with, so any `iss` is rejected.
 		const iss = options.iss;
-		if (metadata && (iss !== undefined || metadata.authorization_response_iss_parameter_supported)) {
-			if (iss !== metadata.issuer) throw new OAuthIssuerMismatchError(metadata.issuer, iss);
+		if (iss !== undefined || metadata?.authorization_response_iss_parameter_supported) {
+			if (iss !== metadata?.issuer) throw new OAuthIssuerMismatchError(metadata?.issuer, iss);
 		}
 		const tokens = await exchangeAuthorizationCode(discovered.authorizationServerUrl, {
 			...tokenOptions,
 			code: options.authorizationCode,
 			codeVerifier: await provider.codeVerifier(),
-			redirectUrl: provider.redirectUrl,
+			redirectUrl,
 		});
 		// A response without `scope` grants the requested scope (RFC 6749 §5.1). Recorded so a step-up can
 		// keep it. Callers pass the options of the authorization request, so `scope` is what was requested.
@@ -364,7 +412,7 @@ async function runFlow(provider: OAuthClientProvider, options: OAuthFlowOptions)
 			await provider.saveTokens(withScope(tokens, existing.scope));
 			return "AUTHORIZED";
 		} catch (error) {
-			if (error instanceof OAuthInsecureEndpointError) throw error;
+			if (options.signal?.aborted || error instanceof OAuthInsecureEndpointError) throw error;
 			if (error instanceof OAuthError && error.code !== "server_error") throw error;
 		}
 	}
@@ -372,7 +420,7 @@ async function runFlow(provider: OAuthClientProvider, options: OAuthFlowOptions)
 	const authorization = await startAuthorization(discovered.authorizationServerUrl, {
 		metadata,
 		clientInformation: client,
-		redirectUrl: provider.redirectUrl,
+		redirectUrl,
 		scope,
 		state,
 		resource,
