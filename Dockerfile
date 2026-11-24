@@ -19,8 +19,10 @@ RUN apt-get update \
      git \
      gnupg \
      ripgrep \
+     texlive-latex-extra \
      vim \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* \
+  && echo "umask 022" >> /etc/bash.bashrc
 
 # Install uv+nvm+node
 #
